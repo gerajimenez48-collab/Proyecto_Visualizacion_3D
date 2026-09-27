@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualización 3D - IDRiD</title>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #111;
+            font-family: Arial, sans-serif;
+        }
+
+        #panel {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        #panel h2 {
+            margin-top: 0;
+            font-size: 18px;
+        }
+
+        #altura {
+            width: 200px;
+        }
+
+        #valorAltura {
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="panel">
+        <h2>Visualización 3D IDRiD</h2>
+
+        <label for="altura">
+            Altura del relieve:
+            <span id="valorAltura">1.0</span>
+        </label>
+
+        <br><br>
+
+        <input
+            type="range"
+            id="altura"
+            min="0"
+            max="5"
+            step="0.1"
+            value="1"
+        >
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --------------------------------------------------
+        // 1. ESCENA
+        // --------------------------------------------------
+
+        const escena = new THREE.Scene();
+
+        escena.background = new THREE.Color(0x111111);
+
+
+        // --------------------------------------------------
+        // 2. CÁMARA
+        // --------------------------------------------------
+
+        const camara = new THREE.PerspectiveCamera(
+            45,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+
+        camara.position.set(0, 0, 8);
+
+
+        // --------------------------------------------------
+        // 3. RENDERIZADOR
+        // --------------------------------------------------
+
+        const renderizador = new THREE.WebGLRenderer({
+            antialias: true
+        });
+
+        renderizador.setSize(
+            window.innerWidth,
+            window.innerHeight
+        );
+
+        renderizador.setPixelRatio(
+            Math.min(window.devicePixelRatio, 2)
+        );
+
+        document.body.appendChild(renderizador.domElement);
+
+
+        // --------------------------------------------------
+        // 4. CONTROLES
+        // --------------------------------------------------
+
+        const controles = new OrbitControls(
+            camara,
+            renderizador.domElement
+        );
+
+        controles.enableDamping = true;
+
+        controles.minDistance = 2;
+        controles.maxDistance = 15;
+
+
+        // --------------------------------------------------
+        // 5. LUCES
+        // --------------------------------------------------
+
+        const luzAmbiente = new THREE.AmbientLight(
+            0xffffff,
+            2
+        );
+
+        escena.add(luzAmbiente);
+
+
+        const luzDireccional = new THREE.DirectionalLight(
+            0xffffff,
+            3
+        );
+
+        luzDireccional.position.set(
+            2,
+            3,
+            5
+        );
+
+        escena.add(luzDireccional);
+
+
+        // --------------------------------------------------
+        // 6. CARGAR IMAGEN Y MÁSCARA
+        // --------------------------------------------------
+
+        const cargadorImagen = new THREE.TextureLoader();
+
+        const imagenRetina = await cargadorImagen.loadAsync(
+            './datos/IDRiD_01.jpg'
+        );
+
+        const mascara = await cargadorImagen.loadAsync(
+            './datos/IDRiD_01_MA.png'
+        );
+
+
+        // --------------------------------------------------
+        // 7. LEER LOS PIXELES DE LA MÁSCARA
+        // --------------------------------------------------
+
+        const canvas = document.createElement('canvas');
+
+        const contexto = canvas.getContext('2d');
+
+        const imagen = mascara.image;
+
+        canvas.width = imagen.width;
+        canvas.height = imagen.height;
+
+        contexto.drawImage(
+            imagen,
+            0,
+            0
+        );
+
+        const datosMascara = contexto.getImageData(
+            0,
+            0,
+            imagen.width,
+            imagen.height
+        ).data;
+
+
+        // --------------------------------------------------
+        // 8. CONFIGURACIÓN DEL RELIEVE
+        // --------------------------------------------------
+
+        const columnas = 300;
+
+        const filas = Math.round(
+            columnas * (imagen.height / imagen.width)
+        );
+
+        const ancho = 8;
+
+        const alto = ancho *
+            (imagen.height / imagen.width);
+
+        const geometria = new THREE.PlaneGeometry(
+            ancho,
+            alto,
+            columnas - 1,
+            filas - 1
+        );
+
+
+        // --------------------------------------------------
+        // 9. GUARDAR ALTURAS BASE
+        // --------------------------------------------------
+
+        const posiciones =
+            geometria.attributes.position;
+
+        const alturasBase = [];
+
+
+        // --------------------------------------------------
+        // 10. CREAR RELIEVE DESDE LA MÁSCARA
+        // --------------------------------------------------
+
+        for (
+            let i = 0;
+            i < posiciones.count;
+            i++
+        ) {
+
+            const x = posiciones.getX(i);
+            const y = posiciones.getY(i);
+
+            const u =
+                (x + ancho / 2) / ancho;
+
+            const v =
+                1 -
+                ((y + alto / 2) / alto);
+
+            const pixelX = Math.floor(
+                u * imagen.width
+            );
+
+            const pixelY = Math.floor(
+                v * imagen.height
+            );
+
+            const indice =
+                (pixelY * imagen.width + pixelX) * 4;
+
+            const valorMascara =
+                datosMascara[indice];
+
+            let altura = 0;
+
+            if (valorMascara > 0) {
+                altura = 0.15;
+            }
+
+            alturasBase.push(altura);
+
+            posiciones.setZ(
+                i,
+                altura
+            );
+        }
+
+
+        // --------------------------------------------------
+        // 11. ACTUALIZAR GEOMETRÍA
+        // --------------------------------------------------
+
+        posiciones.needsUpdate = true;
+
+        geometria.computeVertexNormals();
+
+
+        // --------------------------------------------------
+        // 12. MATERIAL CON LA FOTO DE RETINA
+        // --------------------------------------------------
+
+        const material = new THREE.MeshStandardMaterial({
+
+            map: imagenRetina,
+
+            side: THREE.DoubleSide,
+
+            roughness: 0.8,
+
+            metalness: 0.0
+
+        });
+
+
+        // --------------------------------------------------
+        // 13. SUPERFICIE 3D
+        // --------------------------------------------------
+
+        const superficie = new THREE.Mesh(
+            geometria,
+            material
+        );
+
+        escena.add(superficie);
+
+
+        // --------------------------------------------------
+        // 14. ORIENTACIÓN
+        // --------------------------------------------------
+
+
+
+        // --------------------------------------------------
+        // 15. CONTROL DE ALTURA
+        // --------------------------------------------------
+
+        const controlAltura =
+            document.getElementById('altura');
+
+        const textoAltura =
+            document.getElementById('valorAltura');
+
+
+        controlAltura.addEventListener(
+            'input',
+            () => {
+
+                const escala =
+                    parseFloat(
+                        controlAltura.value
+                    );
+
+                textoAltura.textContent =
+                    escala.toFixed(1);
+
+
+                for (
+                    let i = 0;
+                    i < posiciones.count;
+                    i++
+                ) {
+
+                    posiciones.setZ(
+                        i,
+                        alturasBase[i] * escala
+                    );
+
+                }
+
+                posiciones.needsUpdate = true;
+
+                geometria.computeVertexNormals();
+
+            }
+        );
+
+
+        // --------------------------------------------------
+        // 16. AJUSTAR VENTANA
+        // --------------------------------------------------
+
+        window.addEventListener(
+            'resize',
+            () => {
+
+                camara.aspect =
+                    window.innerWidth /
+                    window.innerHeight;
+
+                camara.updateProjectionMatrix();
+
+                renderizador.setSize(
+                    window.innerWidth,
+                    window.innerHeight
+                );
+
+            }
+        );
+
+
+        // --------------------------------------------------
+        // 17. ANIMACIÓN
+        // --------------------------------------------------
+
+        function animar() {
+
+            requestAnimationFrame(animar);
+
+            controles.update();
+
+            renderizador.render(
+                escena,
+                camara
+            );
+
+        }
+
+        animar();
+
+    </script>
+
+</body>
+</html>

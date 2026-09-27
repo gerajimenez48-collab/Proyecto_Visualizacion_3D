@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Plotly 3D - IDRiD Hemorragias</title>
+
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: white;
+        }
+
+        h2 {
+            text-align: center;
+            padding: 10px;
+            margin: 0;
+        }
+
+        #controles {
+            text-align: center;
+            padding: 10px;
+        }
+
+        #altura {
+            width: 300px;
+        }
+
+        #grafica {
+            width: 100%;
+            height: 85vh;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Visualización 3D de hemorragias - Plotly</h2>
+
+    <div id="controles">
+        Altura del relieve:
+
+        <input
+            type="range"
+            id="altura"
+            min="0"
+            max="10"
+            step="0.1"
+            value="1"
+        >
+
+        <span id="valorAltura">1.0</span>
+    </div>
+
+    <div id="grafica"></div>
+
+    <script>
+
+        const imagenOjo = new Image();
+        const imagenMascara = new Image();
+
+        imagenOjo.src = './datos/IDRiD_01.jpg';
+
+        /*
+         * Ahora utilizamos la máscara de hemorragias.
+         */
+        imagenMascara.src = './datos/IDRiD_01_HE.png';
+
+        let ojoCargado = false;
+        let mascaraCargada = false;
+
+        imagenOjo.onload = function () {
+            ojoCargado = true;
+            iniciarVisualizacion();
+        };
+
+        imagenMascara.onload = function () {
+            mascaraCargada = true;
+            iniciarVisualizacion();
+        };
+
+        function iniciarVisualizacion() {
+
+            if (!ojoCargado || !mascaraCargada) {
+                return;
+            }
+
+            const canvasOjo = document.createElement('canvas');
+            const canvasMascara = document.createElement('canvas');
+
+            const columnas = 150;
+
+            const filas = Math.round(
+                columnas *
+                imagenOjo.height /
+                imagenOjo.width
+            );
+
+            canvasOjo.width = columnas;
+            canvasOjo.height = filas;
+
+            canvasMascara.width = columnas;
+            canvasMascara.height = filas;
+
+            const contextoOjo =
+                canvasOjo.getContext('2d');
+
+            const contextoMascara =
+                canvasMascara.getContext('2d');
+
+            contextoOjo.drawImage(
+                imagenOjo,
+                0,
+                0,
+                columnas,
+                filas
+            );
+
+            contextoMascara.drawImage(
+                imagenMascara,
+                0,
+                0,
+                columnas,
+                filas
+            );
+
+            const datosOjo =
+                contextoOjo.getImageData(
+                    0,
+                    0,
+                    columnas,
+                    filas
+                ).data;
+
+            const datosMascara =
+                contextoMascara.getImageData(
+                    0,
+                    0,
+                    columnas,
+                    filas
+                ).data;
+
+            const x = [];
+            const y = [];
+            const zBase = [];
+            const colores = [];
+
+            for (let j = 0; j < filas; j++) {
+
+                const filaX = [];
+                const filaZ = [];
+                const filaColor = [];
+
+                for (let i = 0; i < columnas; i++) {
+
+                    filaX.push(i);
+
+                    const indice =
+                        (j * columnas + i) * 4;
+
+                    const rojo =
+                        datosOjo[indice];
+
+                    const verde =
+                        datosOjo[indice + 1];
+
+                    const azul =
+                        datosOjo[indice + 2];
+
+                    const gris =
+                        0.299 * rojo +
+                        0.587 * verde +
+                        0.114 * azul;
+
+                    const mascara =
+                        datosMascara[indice];
+
+                    /*
+                     * Si la máscara contiene lesión,
+                     * se genera una elevación.
+                     */
+                    if (mascara > 0) {
+                        filaZ.push(5);
+                    } else {
+                        filaZ.push(0);
+                    }
+
+                    filaColor.push(gris);
+                }
+
+                x.push(filaX);
+                y.push(j);
+                zBase.push(filaZ);
+                colores.push(filaColor);
+            }
+
+            const datos = [{
+                x: x,
+                y: y,
+                z: zBase,
+
+                surfacecolor: colores,
+
+                type: 'surface',
+
+                colorscale: [
+                    [0, 'black'],
+                    [0.20, '#300000'],
+                    [0.40, '#650000'],
+                    [0.60, '#a00000'],
+                    [0.75, '#d00000'],
+                    [0.90, '#eeeeee'],
+                    [1, 'white']
+                ],
+
+                cmin: 0,
+                cmax: 255,
+
+                showscale: false,
+
+                hoverinfo: 'skip'
+            }];
+
+            const opciones = {
+
+                title: 'IDRiD_01 - Hemorragias',
+
+                scene: {
+
+                    xaxis: {
+                        title: 'X',
+                        showgrid: false,
+                        zeroline: false
+                    },
+
+                    yaxis: {
+                        title: 'Y',
+                        showgrid: false,
+                        zeroline: false
+                    },
+
+                    zaxis: {
+                        title: 'Altura del relieve',
+                        range: [0, 6]
+                    },
+
+                    aspectratio: {
+                        x: 1.5,
+                        y: 1,
+                        z: 0.5
+                    },
+
+                    camera: {
+                        eye: {
+                            x: 0,
+                            y: 0,
+                            z: 1.8
+                        }
+                    }
+                },
+
+                margin: {
+                    l: 0,
+                    r: 0,
+                    t: 50,
+                    b: 0
+                }
+            };
+
+            Plotly.newPlot(
+                'grafica',
+                datos,
+                opciones,
+                {
+                    responsive: true,
+                    displaylogo: false
+                }
+            );
+
+            const controlAltura =
+                document.getElementById('altura');
+
+            const textoAltura =
+                document.getElementById('valorAltura');
+
+            controlAltura.addEventListener(
+                'input',
+                function () {
+
+                    const valor =
+                        parseFloat(
+                            controlAltura.value
+                        );
+
+                    textoAltura.textContent =
+                        valor.toFixed(1);
+
+                    const nuevaZ =
+                        zBase.map(
+                            fila =>
+                                fila.map(
+                                    altura =>
+                                        altura > 0
+                                            ? valor * 1.5
+                                            : 0
+                                )
+                        );
+
+                    Plotly.restyle(
+                        'grafica',
+                        {
+                            z: [nuevaZ]
+                        }
+                    );
+
+                    Plotly.relayout(
+                        'grafica',
+                        {
+                            'scene.zaxis.range': [
+                                0,
+                                Math.max(
+                                    3,
+                                    valor * 1.5 + 1
+                                )
+                            ]
+                        }
+                    );
+                }
+            );
+        }
+
+    </script>
+
+</body>
+</html>

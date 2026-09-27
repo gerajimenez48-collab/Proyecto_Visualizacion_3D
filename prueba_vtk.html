@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Prueba VTK.js - IDRiD</title>
+
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        #titulo {
+            padding: 15px;
+            text-align: center;
+            font-size: 22px;
+        }
+
+        #vtk {
+            width: 100vw;
+            height: calc(100vh - 60px);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="titulo">
+        Prueba de visualización 3D con VTK.js
+    </div>
+
+    <div id="vtk"></div>
+
+    <script type="module">
+
+        import vtkFullScreenRenderWindow
+            from "https://cdn.jsdelivr.net/npm/@kitware/vtk.js@32.12.0/Rendering/Misc/FullScreenRenderWindow.js";
+
+        import vtkActor
+            from "https://cdn.jsdelivr.net/npm/@kitware/vtk.js@32.12.0/Rendering/Core/Actor.js";
+
+        import vtkMapper
+            from "https://cdn.jsdelivr.net/npm/@kitware/vtk.js@32.12.0/Rendering/Core/Mapper.js";
+
+        import vtkConeSource
+            from "https://cdn.jsdelivr.net/npm/@kitware/vtk.js@32.12.0/Filters/Sources/ConeSource.js";
+
+        const fullScreenRenderer =
+            vtkFullScreenRenderWindow.newInstance({
+                rootContainer: document.querySelector("#vtk")
+            });
+
+        const renderer =
+            fullScreenRenderer.getRenderer();
+
+        const renderWindow =
+            fullScreenRenderer.getRenderWindow();
+
+        const cone =
+            vtkConeSource.newInstance({
+                height: 2,
+                radius: 1,
+                resolution: 50
+            });
+
+        const mapper =
+            vtkMapper.newInstance();
+
+        mapper.setInputConnection(
+            cone.getOutputPort()
+        );
+
+        const actor =
+            vtkActor.newInstance();
+
+        actor.setMapper(mapper);
+
+        renderer.addActor(actor);
+
+        renderer.resetCamera();
+
+        renderWindow.render();
+
+    </script>
+
+</body>
+</html>

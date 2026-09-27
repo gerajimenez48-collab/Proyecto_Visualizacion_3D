@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+
+    <title>Visualización 3D IDRiD</title>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #111;
+        }
+
+        #panel {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 10;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.78);
+            color: white;
+            border-radius: 8px;
+        }
+
+        #altura {
+            width: 220px;
+        }
+
+        #estado {
+            margin-top: 8px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="panel">
+
+    <strong>Visualización 3D IDRiD</strong>
+
+    <br><br>
+
+    Altura del relieve:
+
+    <input
+        id="altura"
+        type="range"
+        min="0"
+        max="5"
+        step="0.1"
+        value="1"
+    >
+
+    <span id="valorAltura">1.0</span>
+
+    <div id="estado">
+        Rotar: arrastrar con el mouse · Zoom: rueda
+    </div>
+
+</div>
+
+
+<script type="importmap">
+{
+    "imports": {
+        "three":
+        "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+    }
+}
+</script>
+
+
+<script type="module">
+
+import * as THREE from 'three';
+
+import {
+    OrbitControls
+}
+from
+'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
+
+
+// ==================================================
+// 1. ESCENA
+// ==================================================
+
+const escena = new THREE.Scene();
+
+escena.background =
+    new THREE.Color(0x111111);
+
+
+// ==================================================
+// 2. CÁMARA
+// ==================================================
+
+const camara =
+    new THREE.PerspectiveCamera(
+        45,
+        window.innerWidth /
+        window.innerHeight,
+        0.1,
+        100
+    );
+
+camara.position.set(
+    0,
+    0,
+    8
+);
+
+
+// ==================================================
+// 3. RENDERIZADOR
+// ==================================================
+
+const renderizador =
+    new THREE.WebGLRenderer({
+        antialias: true
+    });
+
+renderizador.setPixelRatio(
+    Math.min(window.devicePixelRatio, 2)
+);
+
+renderizador.setSize(
+    window.innerWidth,
+    window.innerHeight
+);
+
+document.body.appendChild(
+    renderizador.domElement
+);
+
+
+// ==================================================
+// 4. CONTROLES
+// ==================================================
+
+const controles =
+    new OrbitControls(
+        camara,
+        renderizador.domElement
+    );
+
+controles.enableRotate = true;
+controles.enableZoom = true;
+controles.enablePan = false;
+controles.enableDamping = true;
+
+
+// ==================================================
+// 5. ILUMINACIÓN
+// ==================================================
+
+const luzPrincipal =
+    new THREE.DirectionalLight(
+        0xffffff,
+        2.5
+    );
+
+luzPrincipal.position.set(
+    2,
+    3,
+    5
+);
+
+escena.add(
+    luzPrincipal
+);
+
+
+const luzSecundaria =
+    new THREE.DirectionalLight(
+        0xffffff,
+        1.2
+    );
+
+luzSecundaria.position.set(
+    -3,
+    -2,
+    4
+);
+
+escena.add(
+    luzSecundaria
+);
+
+
+escena.add(
+    new THREE.AmbientLight(
+        0xffffff,
+        0.7
+    )
+);
+
+
+// ==================================================
+// 6. ARCHIVOS
+// ==================================================
+
+const rutaRetina =
+    './datos/IDRiD_01.jpg';
+
+const rutaAltura =
+    './datos/heightmap_MA.png';
+
+
+// ==================================================
+// 7. CARGAR IMÁGENES
+// ==================================================
+
+const cargador =
+    new THREE.TextureLoader();
+
+const texturaRetina =
+    cargador.load(
+        rutaRetina,
+        () => {
+
+            crearRelieve();
+
+        }
+    );
+
+
+// ==================================================
+// 8. VARIABLES
+// ==================================================
+
+let superficie = null;
+
+let alturasBase = [];
+
+let geometria = null;
+
+
+// ==================================================
+// 9. CREAR RELIEVE
+// ==================================================
+
+function crearRelieve() {
+
+    const imagenAltura =
+        new Image();
+
+    imagenAltura.onload =
+        function () {
+
+            construirMalla(
+                imagenAltura
+            );
+
+        };
+
+    imagenAltura.src =
+        rutaAltura;
+
+}
+
+
+// ==================================================
+// 10. CONSTRUIR MALLA
+// ==================================================
+
+function construirMalla(
+    imagenAltura
+) {
+
+    const canvas =
+        document.createElement(
+            'canvas'
+        );
+
+    canvas.width =
+        imagenAltura.width;
+
+    canvas.height =
+        imagenAltura.height;
+
+
+    const contexto =
+        canvas.getContext(
+            '2d'
+        );
+
+    contexto.drawImage(
+        imagenAltura,
+        0,
+        0
+    );
+
+
+    const datos =
+        contexto.getImageData(
+            0,
+            0,
+            imagenAltura.width,
+            imagenAltura.height
+        ).data;
+
+
+    // --------------------------------------------------
+    // DIMENSIONES DE LA IMAGEN
+    // --------------------------------------------------
+
+    const proporcion =
+        imagenAltura.height /
+        imagenAltura.width;
+
+
+    const columnas = 300;
+
+    const filas =
+        Math.round(
+            columnas *
+            proporcion
+        );
+
+
+    const ancho = 8;
+
+    const alto =
+        ancho *
+        proporcion;
+
+
+    // --------------------------------------------------
+    // GEOMETRÍA
+    // --------------------------------------------------
+
+    geometria =
+        new THREE.PlaneGeometry(
+            ancho,
+            alto,
+            columnas - 1,
+            filas - 1
+        );
+
+
+    const posiciones =
+        geometria.attributes.position;
+
+
+    alturasBase = [];
+
+
+    // --------------------------------------------------
+    // CREAR ALTURAS
+    // --------------------------------------------------
+
+    for (
+        let i = 0;
+        i < posiciones.count;
+        i++
+    ) {
+
+        const x =
+            posiciones.getX(i);
+
+        const y =
+            posiciones.getY(i);
+
+
+        const u =
+            (x + ancho / 2) /
+            ancho;
+
+
+        const v =
+            1 -
+            (
+                (y + alto / 2) /
+                alto
+            );
+
+
+        const pixelX =
+            Math.max(
+                0,
+                Math.min(
+                    imagenAltura.width - 1,
+                    Math.floor(
+                        u *
+                        imagenAltura.width
+                    )
+                )
+            );
+
+
+        const pixelY =
+            Math.max(
+                0,
+                Math.min(
+                    imagenAltura.height - 1,
+                    Math.floor(
+                        v *
+                        imagenAltura.height
+                    )
+                )
+            );
+
+
+        const indice =
+            (
+                pixelY *
+                imagenAltura.width +
+                pixelX
+            ) * 4;
+
+
+        const valor =
+            datos[indice];
+
+
+        // ----------------------------------------------
+        // CONVERTIR BLANCO/GRIS A ALTURA
+        // ----------------------------------------------
+
+        const altura =
+            (valor / 255) * 0.45;
+
+
+        alturasBase.push(
+            altura
+        );
+
+
+        posiciones.setZ(
+            i,
+            altura
+        );
+
+    }
+
+
+    posiciones.needsUpdate =
+        true;
+
+
+    geometria.computeVertexNormals();
+
+
+    // ==================================================
+    // MATERIAL
+    // ==================================================
+
+    const material =
+        new THREE.MeshStandardMaterial({
+
+            map:
+                texturaRetina,
+
+            side:
+                THREE.DoubleSide,
+
+            roughness:
+                0.75,
+
+            metalness:
+                0.0
+
+        });
+
+
+    // ==================================================
+    // SUPERFICIE
+    // ==================================================
+
+    superficie =
+        new THREE.Mesh(
+            geometria,
+            material
+        );
+
+
+    escena.add(
+        superficie
+    );
+
+}
+
+
+// ==================================================
+// 11. CONTROL DE ALTURA
+// ==================================================
+
+const controlAltura =
+    document.getElementById(
+        'altura'
+    );
+
+
+const textoAltura =
+    document.getElementById(
+        'valorAltura'
+    );
+
+
+controlAltura.addEventListener(
+    'input',
+    function () {
+
+        const escala =
+            parseFloat(
+                controlAltura.value
+            );
+
+
+        textoAltura.textContent =
+            escala.toFixed(1);
+
+
+        if (!superficie) {
+            return;
+        }
+
+
+        const posiciones =
+            superficie
+            .geometry
+            .attributes
+            .position;
+
+
+        for (
+            let i = 0;
+            i < posiciones.count;
+            i++
+        ) {
+
+            posiciones.setZ(
+                i,
+                alturasBase[i] *
+                escala
+            );
+
+        }
+
+
+        posiciones.needsUpdate =
+            true;
+
+
+        superficie
+            .geometry
+            .computeVertexNormals();
+
+    }
+);
+
+
+// ==================================================
+// 12. REDIMENSIONAR
+// ==================================================
+
+window.addEventListener(
+    'resize',
+    function () {
+
+        camara.aspect =
+            window.innerWidth /
+            window.innerHeight;
+
+
+        camara.updateProjectionMatrix();
+
+
+        renderizador.setSize(
+            window.innerWidth,
+            window.innerHeight
+        );
+
+    }
+);
+
+
+// ==================================================
+// 13. ANIMACIÓN
+// ==================================================
+
+function animar() {
+
+    requestAnimationFrame(
+        animar
+    );
+
+
+    controles.update();
+
+
+    renderizador.render(
+        escena,
+        camara
+    );
+
+}
+
+
+animar();
+
+</script>
+
+</body>
+
+</html>
